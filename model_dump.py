@@ -132,23 +132,34 @@ def build_models_from_checkpoints(spline_dict, hidden=128, folder="."):
 
 import numpy as np
 
-def format_array(arr, max_per_line=32, indent="       "):
-    """Format a numpy array with line wrapping (used only for W1 here)."""
-    flat = arr.flatten()
-    parts = []
-    for i in range(0, len(flat), max_per_line):
-        chunk = flat[i:i+max_per_line]
-        parts.append(indent + " " + np.array2string(
-            chunk,
-            separator=", ",
-            max_line_width=10**6  # no auto-wrapping by chars
-        ))
-    return "[\n" + ",\n".join(parts) + "\n" + indent + "]"
-
-def dump_models_dict(models, max_per_line=32):
+def _format_1d_wrapped(arr, max_per_line=32, indent="       "):
     """
-    Pretty-print the models dictionary as Python code text.
-    W1 is wrapped (max_per_line numbers per line), others inline.
+    Return a string that represents a 1-D Python list split across lines,
+    NOT nested lists. Example:
+        [
+          a, b, c, ...,   # up to max_per_line numbers
+          ...
+        ]
+    """
+    arr = np.asarray(arr).ravel()
+    lines = [indent + "["]
+    for i in range(0, arr.size, max_per_line):
+        chunk = arr[i:i+max_per_line]
+        nums = ", ".join(repr(float(x)) for x in chunk)
+        # between chunks, add a trailing comma
+        if i + max_per_line < arr.size:
+            lines.append(indent + "  " + nums + ",")
+        else:
+            lines.append(indent + "  " + nums)
+    lines.append(indent + "]")
+    return "\n".join(lines)
+
+import numpy as np
+
+def dump_models_dict(models):
+    """
+    Pretty-print the models dictionary as valid Python code.
+    W1 is printed as a standard nested list of 128 rows × 128 numbers.
     """
     print("{")
     for (cat_int, dir_int), m in models.items():
@@ -157,20 +168,15 @@ def dump_models_dict(models, max_per_line=32):
         print(f"       x_max={m.x_max},")
         print(f"       y_min={m.y_min},")
         print(f"       y_max={m.y_max},")
-        # W0
         print(f"       W0=np.array({m.W0.tolist()}, dtype=float),")
-        # b0
         print(f"       b0=np.array({m.b0.tolist()}, dtype=float),")
-        # W1 (special handling with wrapping)
-        print(f"       W1=np.array([")
+        # W1 as full nested list
+        print("       W1=np.array([")
         for row in m.W1:
-            print(format_array(row, max_per_line, indent="           "))
+            print(f"           {row.tolist()},")
         print("       ], dtype=float),")
-        # b1
         print(f"       b1=np.array({m.b1.tolist()}, dtype=float),")
-        # W2
         print(f"       W2=np.array({m.W2.tolist()}, dtype=float),")
-        # b2
         print(f"       b2=np.array({m.b2.tolist()}, dtype=float)")
         print("  ),")
     print("}")
